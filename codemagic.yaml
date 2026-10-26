@@ -6,32 +6,32 @@ workflows:
     environment:
       xcode: latest
     scripts:
-      - name: Locate Xcode project and scheme
+      - name: Find Xcode project
         script: |
-          echo "Repository root: $CM_BUILD_DIR"
-          find "$CM_BUILD_DIR" -maxdepth 6 -name 'Unity-iPhone.xcodeproj' -print
-          PROJECT_PATH="$(find "$CM_BUILD_DIR" -maxdepth 6 -name 'Unity-iPhone.xcodeproj' -print -quit)"
+          PROJECT_PATH="$(find "$CM_BUILD_DIR" -maxdepth 8 -type d -name 'Unity-iPhone.xcodeproj' -print -quit)"
           if [ -z "$PROJECT_PATH" ]; then
-            echo "ERROR: Unity-iPhone.xcodeproj not found. Ensure the complete exported iOS project is committed to GitHub."
+            echo "ERROR: Unity-iPhone.xcodeproj not found. Check that the complete exported iOS project is in GitHub."
+            find "$CM_BUILD_DIR" -maxdepth 3 -type d -print
             exit 1
           fi
-          echo "PROJECT_PATH=$PROJECT_PATH" > /tmp/unity_project_path.txt
+          echo "Found project: $PROJECT_PATH"
+          echo "$PROJECT_PATH" > "$CM_BUILD_DIR/project_path.txt"
           xcodebuild -list -project "$PROJECT_PATH"
       - name: Build and package unsigned IPA
         script: |
-          PROJECT_PATH="$(cat /tmp/unity_project_path.txt)"
-          PROJECT_DIR="$(dirname "$PROJECT_PATH")"
+          PROJECT_PATH="$(cat "$CM_BUILD_DIR/project_path.txt")"
           mkdir -p "$CM_BUILD_DIR/build/ios"
           xcodebuild             -project "$PROJECT_PATH"             -scheme Unity-iPhone             -configuration Release             -sdk iphoneos             -destination 'generic/platform=iOS'             -derivedDataPath "$CM_BUILD_DIR/build/ios/DerivedData"             CODE_SIGNING_ALLOWED=NO             build
           APP_PATH="$CM_BUILD_DIR/build/ios/DerivedData/Build/Products/Release-iphoneos/Unity-iPhone.app"
           if [ ! -d "$APP_PATH" ]; then
-            echo "ERROR: Built .app not found at $APP_PATH"
+            echo "ERROR: Unity-iPhone.app not found. Check the Xcode build log for the real build error."
+            find "$CM_BUILD_DIR/build/ios/DerivedData/Build/Products" -maxdepth 3 -print 2>/dev/null || true
             exit 1
           fi
           mkdir -p "$CM_BUILD_DIR/build/ios/Payload"
-          cp -R "$APP_PATH" "$CM_BUILD_DIR/build/ios/Payload/"
+          cp -R "$APP_PATH" "$CM_BUILD_DIR/build/ios/Payload/Unity-iPhone.app"
           cd "$CM_BUILD_DIR/build/ios"
-          /usr/bin/zip -r IncomeCalculator.ipa Payload
+          /usr/bin/zip -qry IncomeCalculator.ipa Payload
     artifacts:
       - build/ios/*.ipa
       - build/ios/DerivedData/Build/Products/Release-iphoneos/*.app
