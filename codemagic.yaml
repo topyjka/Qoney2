@@ -1,0 +1,38 @@
+workflows:
+  income-calculator-ios:
+    name: IncomeCalculator iOS IPA
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+    scripts:
+      - name: Locate Xcode project and scheme
+        script: |
+          echo "Repository root: $CM_BUILD_DIR"
+          find "$CM_BUILD_DIR" -maxdepth 6 -name 'Unity-iPhone.xcodeproj' -print
+          PROJECT_PATH="$(find "$CM_BUILD_DIR" -maxdepth 6 -name 'Unity-iPhone.xcodeproj' -print -quit)"
+          if [ -z "$PROJECT_PATH" ]; then
+            echo "ERROR: Unity-iPhone.xcodeproj not found. Ensure the complete exported iOS project is committed to GitHub."
+            exit 1
+          fi
+          echo "PROJECT_PATH=$PROJECT_PATH" > /tmp/unity_project_path.txt
+          xcodebuild -list -project "$PROJECT_PATH"
+      - name: Build and package unsigned IPA
+        script: |
+          PROJECT_PATH="$(cat /tmp/unity_project_path.txt)"
+          PROJECT_DIR="$(dirname "$PROJECT_PATH")"
+          mkdir -p "$CM_BUILD_DIR/build/ios"
+          xcodebuild             -project "$PROJECT_PATH"             -scheme Unity-iPhone             -configuration Release             -sdk iphoneos             -destination 'generic/platform=iOS'             -derivedDataPath "$CM_BUILD_DIR/build/ios/DerivedData"             CODE_SIGNING_ALLOWED=NO             build
+          APP_PATH="$CM_BUILD_DIR/build/ios/DerivedData/Build/Products/Release-iphoneos/Unity-iPhone.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "ERROR: Built .app not found at $APP_PATH"
+            exit 1
+          fi
+          mkdir -p "$CM_BUILD_DIR/build/ios/Payload"
+          cp -R "$APP_PATH" "$CM_BUILD_DIR/build/ios/Payload/"
+          cd "$CM_BUILD_DIR/build/ios"
+          /usr/bin/zip -r IncomeCalculator.ipa Payload
+    artifacts:
+      - build/ios/*.ipa
+      - build/ios/DerivedData/Build/Products/Release-iphoneos/*.app
+      - build/ios/DerivedData/Build/Products/Release-iphoneos/*.dSYM
