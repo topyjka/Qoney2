@@ -1,37 +1,67 @@
+
 workflows:
   income-calculator-ios:
-    name: IncomeCalculator iOS IPA
+    name: Qoney iOS IPA
     max_build_duration: 120
     instance_type: mac_mini_m2
+
     environment:
       xcode: latest
+
     scripts:
       - name: Find Xcode project and fix script permissions
         script: |
           PROJECT_PATH="$(find "$CM_BUILD_DIR" -maxdepth 8 -type d -name 'Unity-iPhone.xcodeproj' -print -quit)"
+
           if [ -z "$PROJECT_PATH" ]; then
             echo "ERROR: Unity-iPhone.xcodeproj not found."
             exit 1
           fi
+
           echo "$PROJECT_PATH" > "$CM_BUILD_DIR/project_path.txt"
-          chmod +x "$CM_BUILD_DIR/process_symbols.sh" 2>/dev/null || true
-          find "$CM_BUILD_DIR" -type f \( -name '*.sh' -o -name 'process_symbols' -o -name 'process_symbols_il2cpp.sh' \) -exec chmod +x {} \;
+
+          find "$CM_BUILD_DIR" -type f -name '*.sh' -exec chmod +x {} \;
+
           xcodebuild -list -project "$PROJECT_PATH"
+
       - name: Build and package unsigned IPA
         script: |
+          set -e
+
           PROJECT_PATH="$(cat "$CM_BUILD_DIR/project_path.txt")"
-          mkdir -p "$CM_BUILD_DIR/build/ios"
-          xcodebuild             -project "$PROJECT_PATH"             -scheme Unity-iPhone             -configuration Release             -sdk iphoneos             -destination 'generic/platform=iOS'             -derivedDataPath "$CM_BUILD_DIR/build/ios/DerivedData"             CODE_SIGNING_ALLOWED=NO             build
-          APP_PATH="$CM_BUILD_DIR/build/ios/DerivedData/Build/Products/Release-iphoneos/Unity-iPhone.app"
+          BUILD_DIR="$CM_BUILD_DIR/build/ios"
+          DERIVED_DATA="$BUILD_DIR/DerivedData"
+
+          mkdir -p "$BUILD_DIR"
+
+          xcodebuild \
+            -project "$PROJECT_PATH" \
+            -scheme Unity-iPhone \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+          APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Qoney.app"
+
           if [ ! -d "$APP_PATH" ]; then
-            echo "ERROR: Unity-iPhone.app was not produced."
+            echo "ERROR: Qoney.app was not produced."
+            find "$DERIVED_DATA/Build/Products" -maxdepth 3 -name '*.app' -print
             exit 1
           fi
-          mkdir -p "$CM_BUILD_DIR/build/ios/Payload"
-          cp -R "$APP_PATH" "$CM_BUILD_DIR/build/ios/Payload/Unity-iPhone.app"
-          cd "$CM_BUILD_DIR/build/ios"
-          /usr/bin/zip -qry IncomeCalculator.ipa Payload
+
+          mkdir -p "$BUILD_DIR/Payload"
+          rm -rf "$BUILD_DIR/Payload/Qoney.app"
+          cp -R "$APP_PATH" "$BUILD_DIR/Payload/Qoney.app"
+
+          cd "$BUILD_DIR"
+          /usr/bin/zip -qry Qoney.ipa Payload
+
+          echo "IPA created: $BUILD_DIR/Qoney.ipa"
+
     artifacts:
-      - build/ios/*.ipa
+      - build/ios/Qoney.ipa
       - build/ios/DerivedData/Build/Products/Release-iphoneos/*.app
       - build/ios/DerivedData/Build/Products/Release-iphoneos/*.dSYM
