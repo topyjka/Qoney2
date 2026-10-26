@@ -6,16 +6,16 @@ workflows:
     environment:
       xcode: latest
     scripts:
-      - name: Find Xcode project
+      - name: Find Xcode project and fix script permissions
         script: |
           PROJECT_PATH="$(find "$CM_BUILD_DIR" -maxdepth 8 -type d -name 'Unity-iPhone.xcodeproj' -print -quit)"
           if [ -z "$PROJECT_PATH" ]; then
-            echo "ERROR: Unity-iPhone.xcodeproj not found. Check that the complete exported iOS project is in GitHub."
-            find "$CM_BUILD_DIR" -maxdepth 3 -type d -print
+            echo "ERROR: Unity-iPhone.xcodeproj not found."
             exit 1
           fi
-          echo "Found project: $PROJECT_PATH"
           echo "$PROJECT_PATH" > "$CM_BUILD_DIR/project_path.txt"
+          chmod +x "$CM_BUILD_DIR/process_symbols.sh" 2>/dev/null || true
+          find "$CM_BUILD_DIR" -type f \( -name '*.sh' -o -name 'process_symbols' -o -name 'process_symbols_il2cpp.sh' \) -exec chmod +x {} \;
           xcodebuild -list -project "$PROJECT_PATH"
       - name: Build and package unsigned IPA
         script: |
@@ -24,8 +24,7 @@ workflows:
           xcodebuild             -project "$PROJECT_PATH"             -scheme Unity-iPhone             -configuration Release             -sdk iphoneos             -destination 'generic/platform=iOS'             -derivedDataPath "$CM_BUILD_DIR/build/ios/DerivedData"             CODE_SIGNING_ALLOWED=NO             build
           APP_PATH="$CM_BUILD_DIR/build/ios/DerivedData/Build/Products/Release-iphoneos/Unity-iPhone.app"
           if [ ! -d "$APP_PATH" ]; then
-            echo "ERROR: Unity-iPhone.app not found. Check the Xcode build log for the real build error."
-            find "$CM_BUILD_DIR/build/ios/DerivedData/Build/Products" -maxdepth 3 -print 2>/dev/null || true
+            echo "ERROR: Unity-iPhone.app was not produced."
             exit 1
           fi
           mkdir -p "$CM_BUILD_DIR/build/ios/Payload"
